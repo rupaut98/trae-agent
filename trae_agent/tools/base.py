@@ -57,7 +57,6 @@ class ToolParameter():
     enum: list[str] | None = None
     items: dict[str, object] | None = None
     required: bool = True
-    minimum: int | None = None
 
 
 class Tool(ABC):
@@ -115,9 +114,6 @@ class Tool(ABC):
 
             if param.items:
                 properties[param.name]["items"] = param.items
-            
-            if param.minimum is not None:
-                properties[param.name]["minimum"] = param.minimum
 
             if param.required:
                 required.append(param.name)
