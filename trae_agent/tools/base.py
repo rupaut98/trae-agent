@@ -57,12 +57,14 @@ class ToolParameter():
     enum: list[str] | None = None
     items: dict[str, object] | None = None
     required: bool = True
+    minimum: int | None = None
 
 
 class Tool(ABC):
     """Base class for all tools."""
 
-    def __init__(self):
+    def __init__(self, model_provider: str | None = None):
+        self.model_provider = model_provider
         self.name: str = self.get_name()
         self.description: str = self.get_description()
         self.parameters: list[ToolParameter] = self.get_parameters()
@@ -113,6 +115,9 @@ class Tool(ABC):
 
             if param.items:
                 properties[param.name]["items"] = param.items
+            
+            if param.minimum is not None:
+                properties[param.name]["minimum"] = param.minimum
 
             if param.required:
                 required.append(param.name)
@@ -120,6 +125,9 @@ class Tool(ABC):
         schema["properties"] = properties
         if len(required) > 0:
             schema["required"] = required
+        
+        # extra properties are not allowed
+        schema["additionalProperties"] = False
 
         return schema
 

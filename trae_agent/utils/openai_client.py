@@ -40,99 +40,87 @@ class OpenAIClient(BaseLLMClient):
 
     @override
     def chat(self, messages: list[LLMMessage], model_parameters: ModelParameters, tools: list[Tool] | None = None, reuse_history: bool = True) -> LLMResponse:
-        """Send chat messages to OpenAI with optional tool support."""
-        openai_messages: ResponseInputParam = self.parse_messages(messages)
+        """Send chat messages to OpenAI using the standard Chat Completions API."""
+
+        api_request_messages = []
+        if reuse_history:
+            api_request_messages.extend(self.message_history)
+        
+        openai_messages_for_call = self.parse_messages(messages)
+        api_request_messages.extend(openai_messages_for_call)
 
         tool_schemas = None
         if tools:
-            tool_schemas = [FunctionToolParam(
-                name=tool.name,
-                description=tool.description,
-                parameters=tool.get_input_schema(),
-                strict=True,
-                type="function"
-            ) for tool in tools]
-
-        if reuse_history:
-            self.message_history = self.message_history + openai_messages
-        else:
-            self.message_history = openai_messages
+            tool_schemas = [
+                {"type": "function", "function": tool.json_definition()}
+                for tool in tools
+            ]
 
         response = None
         error_message = ""
+
+        api_params = {
+            "temperature": model_parameters.temperature,
+            "top_p": model_parameters.top_p,
+        }
+        if model_parameters.model == "o3":
+            # The 'o3' model supports max_completion_tokens instead of max_tokens
+            api_params["max_completion_tokens"] = model_parameters.max_tokens
+            # The 'o3' model requires a temperature of exactly 1
+            api_params["temperature"] = 1.0
+        else:
+            api_params["max_tokens"] = model_parameters.max_tokens
+
         for i in range(model_parameters.max_retries):
             try:
-                response = self.client.responses.create(
-                    input=self.message_history,
+                response = self.client.chat.completions.create(
+                    messages=api_request_messages,
                     model=model_parameters.model,
                     tools=tool_schemas if tool_schemas else openai.NOT_GIVEN,
-                    temperature=model_parameters.temperature,
-                    top_p=model_parameters.top_p,
-                    max_output_tokens=model_parameters.max_tokens,
+                    tool_choice="auto",
+                    **api_params,
                 )
                 break
             except Exception as e:
                 error_message += f"Error {i + 1}: {str(e)}\n"
-                # Randomly sleep for 3-30 seconds
                 time.sleep(random.randint(3, 30))
                 continue
 
         if response is None:
             raise ValueError(f"Failed to get response from OpenAI after max retries: {error_message}")
 
-        content = ""
-        tool_calls: list[ToolCall] = []
-        for output_block in response.output:
-            if output_block.type == "function_call":
-                tool_calls.append(ToolCall(
-                    call_id=output_block.call_id,
-                    name=output_block.name,
-                    arguments=json.loads(output_block.arguments) if output_block.arguments else {},
-                    id=output_block.id
-                ))
-                tool_call_param = ResponseFunctionToolCallParam(
-                    arguments=output_block.arguments,
-                    call_id=output_block.call_id,
-                    name=output_block.name,
-                    type="function_call",
-                )
-                if output_block.status:
-                    tool_call_param["status"] = output_block.status
-                if output_block.id:
-                    tool_call_param["id"] = output_block.id
-                self.message_history.append(tool_call_param)
-            elif output_block.type == "message":
-                for content_block in output_block.content:
-                    if content_block.type == "output_text":
-                        content += content_block.text
+        response_message = response.choices[0].message
+        content = response_message.content or ""
 
-        if content != "":
-            self.message_history.append(
-                EasyInputMessageParam(
-                    content=content,
-                    role="assistant",
-                    type="message"
-                )
-            )
+        self.message_history = api_request_messages + [response_message.model_dump(exclude_unset=True)]
+        
+        tool_calls: list[ToolCall] = []
+        if response_message.tool_calls:
+            for tc in response_message.tool_calls:
+                tool_calls.append(ToolCall(
+                    call_id=tc.id,
+                    name=tc.function.name,
+                    arguments=json.loads(tc.function.arguments),
+                    id=tc.id
+                ))
 
         usage = None
         if response.usage:
             usage = LLMUsage(
-                input_tokens=response.usage.input_tokens,
-                output_tokens=response.usage.output_tokens,
-                cache_read_input_tokens=response.usage.input_tokens_details.cached_tokens,
-                reasoning_tokens=response.usage.output_tokens_details.reasoning_tokens
+                input_tokens=response.usage.prompt_tokens,
+                output_tokens=response.usage.completion_tokens,
+                cache_read_input_tokens=0,
+                reasoning_tokens=0
             )
 
         llm_response = LLMResponse(
             content=content,
             usage=usage,
             model=response.model,
-            finish_reason=response.status,
-            tool_calls=tool_calls if len(tool_calls) > 0 else None
+            finish_reason=response.choices[0].finish_reason,
+            tool_calls=tool_calls if tool_calls else None
         )
 
-        # Record trajectory if recorder is available
         if self.trajectory_recorder:
             self.trajectory_recorder.record_llm_interaction(
                 messages=messages,
@@ -163,7 +151,18 @@ class OpenAIClient(BaseLLMClient):
         openai_messages: ResponseInputParam = []
         for msg in messages:
             if msg.tool_result:
-                openai_messages.append(self.parse_tool_call_result(msg.tool_result))
+                tool_result = msg.tool_result
+                result_content = ""
+                if tool_result.result:
+                    result_content += tool_result.result
+                if tool_result.error:
+                    result_content += f"\\nError: {tool_result.error}"
+                
+                openai_messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_result.call_id,
+                    "content": result_content.strip()
+                })
             elif msg.tool_call:
                 openai_messages.append(self.parse_tool_call(msg.tool_call))
             else:

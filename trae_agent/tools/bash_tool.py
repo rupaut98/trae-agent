@@ -125,9 +125,9 @@ class BashTool(Tool):
 
     _session: _BashSession | None
 
-    def __init__(self):
+    def __init__(self, model_provider: str | None = None):
         self._session = None
-        super().__init__()
+        super().__init__(model_provider)
 
     @override
     def get_name(self) -> str:
@@ -146,6 +146,10 @@ class BashTool(Tool):
 
     @override
     def get_parameters(self) -> list[ToolParameter]:
+        # For OpenAI models, all parameters must be required=True
+        # For other providers, optional parameters can have required=False
+        restart_required = True if self.model_provider == "openai" else False
+        
         return [
             ToolParameter(
                 name="command",
@@ -157,7 +161,7 @@ class BashTool(Tool):
                 name="restart",
                 type="boolean",
                 description="Set to true to restart the bash session.",
-                required=False
+                required=restart_required
             )
         ]
 

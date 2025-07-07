@@ -115,13 +115,15 @@ You should:
                 name="thought_number",
                 type="integer",
                 description="Current thought number. Minimum value is 1.",
-                required=True
+                required=True,
+                minimum=1
             ),
             ToolParameter(
                 name="total_thoughts",
                 type="integer",
                 description="Estimated total thoughts needed. Minimum value is 1.",
-                required=True
+                required=True,
+                minimum=1
             ),
             ToolParameter(
                 name="is_revision",
@@ -132,11 +134,13 @@ You should:
                 name="revises_thought",
                 type="integer",
                 description="Which thought is being reconsidered. Minimum value is 1.",
+                minimum=1
             ),
             ToolParameter(
                 name="branch_from_thought",
                 type="integer",
                 description="Branching point thought number. Minimum value is 1.",
+                minimum=1
             ),
             ToolParameter(
                 name="branch_id",
@@ -150,10 +154,10 @@ You should:
             )
         ]
 
-    def __init__(self):
+    def __init__(self, model_provider: str | None = None):
         self.thought_history: list[ThoughtData] = []
         self.branches: dict[str, list[ThoughtData]] = {}
-        super().__init__()
+        super().__init__(model_provider)
 
     def _validate_thought_data(self, arguments: ToolCallArguments) -> ThoughtData:
         """Validate the input arguments and return a ThoughtData object."""
