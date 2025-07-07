@@ -131,12 +131,12 @@ You should:
             ToolParameter(
                 name="revises_thought",
                 type="integer",
-                description="Which thought is being reconsidered. Minimum value is 1."
+                description="Which thought is being reconsidered. Minimum value is 1.",
             ),
             ToolParameter(
                 name="branch_from_thought",
                 type="integer",
-                description="Branching point thought number. Minimum value is 1."
+                description="Branching point thought number. Minimum value is 1.",
             ),
             ToolParameter(
                 name="branch_id",
