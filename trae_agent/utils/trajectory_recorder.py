@@ -59,12 +59,12 @@ class TrajectoryRecorder:
             self.trajectory_dir = Path(self._custom_trajectory_path)
         else:
             now = self._start_time
-            date_str = now.strftime("%Y%m%d")
-            timestamp = now.strftime("%H%M%S")
-            short_uuid = str(uuid.uuid4())[:8]
-            unique_folder_name = f"{timestamp}_{short_uuid}"
+            _date_str = now.strftime("%Y%m%d")
+            _timestamp = now.strftime("%H%M%S")
+            _short_uuid = str(uuid.uuid4())[:8]
+            _unique_folder_name = f"{_timestamp}_{_short_uuid}"
 
-            self.trajectory_dir = Path("trajectories") / provider / date_str / unique_folder_name
+            self.trajectory_dir = Path("trajectories") / provider / _date_str / _unique_folder_name
 
         self.trajectory_path = self.trajectory_dir / "trajectory.json"
         self.trajectory_data.update(
