@@ -111,14 +111,15 @@ def run(
         sys.exit(1)
 
     # Change working directory if specified
-    if not working_dir:
-        working_dir = os.getcwd()
+    if working_dir:
         try:
             os.chdir(working_dir)
             console.print(f"[blue]Changed working directory to: {working_dir}[/blue]")
         except Exception as e:
             console.print(f"[red]Error changing directory: {e}[/red]")
             sys.exit(1)
+    else:
+        working_dir = os.getcwd()
 
     config = load_config(config_file, provider, model, model_base_url, api_key, max_steps)
 
