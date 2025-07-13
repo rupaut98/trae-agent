@@ -164,24 +164,29 @@ class ToolExecutor:
         self._tools = tools
         self._tool_map: dict[str, Tool] | None = None
 
+    def _normalize_name(self, name: str) -> str:
+        """Normalize tool name by making it lowercase and removing underscores."""
+        return name.lower().replace("_", "")
+
     @property
     def tools(self) -> dict[str, Tool]:
         if self._tool_map is None:
-            self._tool_map = {tool.name: tool for tool in self._tools}
+            self._tool_map = {self._normalize_name(tool.name): tool for tool in self._tools}
         return self._tool_map
 
     async def execute_tool_call(self, tool_call: ToolCall) -> ToolResult:
         """Execute a tool call."""
-        if tool_call.name not in self.tools:
+        normalized_name = self._normalize_name(tool_call.name)
+        if normalized_name not in self.tools:
             return ToolResult(
                 name=tool_call.name,
                 success=False,
-                error=f"Tool '{tool_call.name}' not found. Available tools: {list(self.tools.keys())}",
+                error=f"Tool '{tool_call.name}' not found. Available tools: {[tool.name for tool in self._tools]}",
                 call_id=tool_call.call_id,
                 id=tool_call.id,
             )
 
-        tool = self.tools[tool_call.name]
+        tool = self.tools[normalized_name]
 
         try:
             tool_exec_result = await tool.execute(tool_call.arguments)
