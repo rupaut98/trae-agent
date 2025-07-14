@@ -7,7 +7,10 @@ import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import override
+from typing import TypeAlias, override
+
+ParamSchemaValue: TypeAlias = str | list[str] | bool | dict[str, object]
+Property: TypeAlias = dict[str, ParamSchemaValue]
 
 
 class ToolError(Exception):
@@ -127,31 +130,46 @@ class Tool(ABC):
             "type": "object",
         }
 
-        properties: dict[str, dict[str, str | list[str] | dict[str, object]]] = {}
+        properties: dict[str, Property] = {}
         required: list[str] = []
 
         for param in self.parameters:
-            properties[param.name] = {
+            param_schema: Property = {
                 "type": param.type,
                 "description": param.description,
             }
+
+            # For OpenAI strict mode, all params must be in 'required'.
+            # Optional params are made "nullable" to be compliant.
+            if self.model_provider == "openai":
+                required.append(param.name)
+                if not param.required:
+                    current_type = param_schema["type"]
+                    if isinstance(current_type, str):
+                        param_schema["type"] = [current_type, "null"]
+                    elif isinstance(current_type, list) and "null" not in current_type:
+                        param_schema["type"] = list(current_type) + ["null"]
+            elif param.required:
+                required.append(param.name)
+
             if param.enum:
-                properties[param.name]["enum"] = param.enum
+                param_schema["enum"] = param.enum
 
             if param.items:
-                properties[param.name]["items"] = param.items
+                param_schema["items"] = param.items
 
-            if param.required:
-                required.append(param.name)
+            # For OpenAI, nested objects also need additionalProperties: false
+            if self.model_provider == "openai" and param.type == "object":
+                param_schema["additionalProperties"] = False
+
+            properties[param.name] = param_schema
 
         schema["properties"] = properties
         if len(required) > 0:
             schema["required"] = required
 
-        # For OpenAI, we need to specify that additional properties are not allowed.
-        # For Gemini, this field is not allowed.
+        # For OpenAI, the top-level schema needs additionalProperties: false
         if self.model_provider == "openai":
-            # extra properties are not allowed
             schema["additionalProperties"] = False
 
         return schema
